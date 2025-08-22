@@ -119,5 +119,5 @@ Check out the live application here:
 
 ## 📜 License
 
-
+This project is licensed under the [MIT License](LICENSE).
 
