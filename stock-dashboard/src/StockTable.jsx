@@ -1,41 +1,31 @@
-import { useState, useEffect,useRef } from "react";
+import { useState, useEffect, useRef } from "react";
 import Spinner from "./Spinner";
 
 export default function StockTable() {
-  // State to hold stock data
-  const [stocks, setStocks] = useState([]);
-  // Loading indicator for fetch operations
-  const [loading, setLoading] = useState(false);
-  // Flag to indicate if sample data is being used
-  const [usingSampleData, setUsingSampleData] = useState(false);
-  //  source of stock data 
-  const [source, setSource] = useState("");
+  const [stocks, setStocks] = useState([]); // Stock data
+  const [loading, setLoading] = useState(false); // Loading state
+  const [usingSampleData, setUsingSampleData] = useState(false); // Fallback flag
+  const [source, setSource] = useState(""); // Data source
 
-  // List of stock symbols to fetch
   const symbols = ["AAPL", "MSFT", "GOOGL", "TSLA"];
-
-  
-const didFetch = useRef(false);
+  const didFetch = useRef(false); // Prevent duplicate fetch
 
   useEffect(() => {
-    if (didFetch.current) return; // skip if already fetched
-  didFetch.current = true;
+    if (didFetch.current) return;
+    didFetch.current = true;
 
-    setSource(""); // reset source
-     // Check cached data
-  const cached = localStorage.getItem("stocks");
-  const cacheTime = localStorage.getItem("stocks_time");
-  const now = Date.now();
+    const cached = localStorage.getItem("stocks");
+    const cacheTime = localStorage.getItem("stocks_time");
+    const now = Date.now();
 
-  // Only use cache if it's less than 5 minutes old
-  if (cached && cacheTime && now - cacheTime < 5 * 60 * 1000) {
-    setStocks(JSON.parse(cached));
-    setUsingSampleData(false);
-  } else {
-    fetchStocks(); // fetch fresh data once
-  }
-  // Empty dependency array ensures this runs only once on mount
-}, []);
+    // // Use cached data if less than 2 mins old(since have limited free requests)
+    if (cached && cacheTime && now - cacheTime < 2 * 60 * 1000) {
+      setStocks(JSON.parse(cached));
+      setUsingSampleData(false);
+    } else {
+      fetchStocks();
+    }
+  }, []);
 
   const fetchStocks = async () => {
     setLoading(true);
@@ -44,7 +34,7 @@ const didFetch = useRef(false);
     let results = [];
 
     try {
-      // Try fetching data from Alpha Vantage
+      // Try Alpha Vantage API
       results = await Promise.all(
         symbols.map(async (symbol) => {
           const res = await fetch(
@@ -55,11 +45,10 @@ const didFetch = useRef(false);
           if (!quote) return null;
 
           return {
-            symbol:quote["01. symbol"],
+            symbol: quote["01. symbol"],
             price: parseFloat(quote["05. price"]),
             change: (
-              ((parseFloat(quote["05. price"]) -
-                parseFloat(quote["08. previous close"])) /
+              ((parseFloat(quote["05. price"]) - parseFloat(quote["08. previous close"])) /
                 parseFloat(quote["08. previous close"])) *
               100
             ).toFixed(2),
@@ -67,15 +56,10 @@ const didFetch = useRef(false);
         })
       );
 
-      // Filter out null results
       results = results.filter(Boolean);
+      if (results.length) setSource("Alpha Vantage");
 
-      // Set source if Alpha Vantage succeeded
-      if (results.length) {
-        setSource("Alpha Vantage");
-      }
-
-      // If Alpha Vantage failed, try Finnhub
+      // Fallback to Finnhub if needed
       if (!results.length) {
         results = await Promise.all(
           symbols.map(async (symbol) => {
@@ -86,7 +70,7 @@ const didFetch = useRef(false);
             if (!data || !data.c) return null;
 
             return {
-              symbol : symbol,
+              symbol,
               price: data.c,
               change: (((data.c - data.pc) / data.pc) * 100).toFixed(2),
             };
@@ -94,63 +78,44 @@ const didFetch = useRef(false);
         );
 
         results = results.filter(Boolean);
-      }
-
-      // Set source if Finnhub succeeded
-      if (results.length) {
-        setSource("Finnhub");
-      }
-
-      // If both APIs fail, use sample data
-      if (!results.length) {
-        setUsingSampleData(true);
-        results = [
-          { symbol: "AAPL", price: 172, change: 1.2 },
-          { symbol: "MSFT", price: 320, change: -0.8 },
-          { symbol: "GOOGL", price: 135, change: 0.5 },
-          { symbol: "TSLA", price: 275, change: 2.1 },
-        ];
+        if (results.length) setSource("Finnhub");
       }
 
       setStocks(results);
       localStorage.setItem("stocks", JSON.stringify(results));
       localStorage.setItem("stocks_time", Date.now().toString());
-
-
     } catch (error) {
-       // If fetch fails, fallback to cache first
-    const cached = localStorage.getItem("stocks");
-    if (cached) {
-      setStocks(JSON.parse(cached));
-      setSource("Cache");
-    } else {
-      // No cache, use sample data
-      setUsingSampleData(true);
-      setStocks([
-        { symbol: "AAPL", price: 172, change: 1.2 },
-        { symbol: "MSFT", price: 320, change: -0.8 },
-        { symbol: "GOOGL", price: 135, change: 0.5 },
-        { symbol: "TSLA", price: 275, change: 2.1 },
-      ]);
-    }
+      // Use cache or sample data if fetch fails
+      const cached = localStorage.getItem("stocks");
+      if (cached) {
+        setStocks(JSON.parse(cached));
+        setSource("Cache");
+      } else {
+        setUsingSampleData(true);
+        setStocks([
+          { symbol: "AAPL", price: 172, change: 1.2 },
+          { symbol: "MSFT", price: 320, change: -0.8 },
+          { symbol: "GOOGL", price: 135, change: 0.5 },
+          { symbol: "TSLA", price: 275, change: 2.1 },
+        ]);
+      }
     } finally {
       setLoading(false);
     }
   };
 
-  // Show loading skeleton while fetching
+  {/* show spinner while loading */}
   if (loading) {
-  return (
-    <div className="min-h-screen bg-gray-50 p-4 sm:p-6 lg:p-8">
-      <div className="max-w-4xl mx-auto">
-        <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-8 text-center">
-          <Spinner />
+    return (
+      <div className="min-h-screen bg-gray-50 p-4 sm:p-6 lg:p-8">
+        <div className="max-w-4xl mx-auto">
+          <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-8 text-center">
+            <Spinner />
+          </div>
         </div>
       </div>
-    </div>
-  );
-}
-
+    );
+  }
 
   return (
     <div className="min-h-screen bg-gray-50 p-4 sm:p-6 lg:p-8">
@@ -167,16 +132,16 @@ const didFetch = useRef(false);
           </p>
         </div>
 
-        {/* Show warning if using sample data */}
+        {/* Sample data warning */}
         {usingSampleData && (
           <div className="mb-4 p-3 bg-yellow-100 text-yellow-800 rounded text-center">
-            ⚠️ Real-time data is currently unavailable. Showing sample data.
+            ⚠️ Real-time data unavailable. Showing sample data.
           </div>
         )}
 
-        {/* Stock table container */}
+        {/* Stock table */}
         <div className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
-          {/* Desktop Table */}
+          {/* Desktop table */}
           <div className="hidden sm:block">
             <table className="w-full">
               <thead className="bg-gray-50 border-b border-gray-200">
@@ -209,9 +174,7 @@ const didFetch = useRef(false);
                     <td className="px-6 py-4 whitespace-nowrap text-right">
                       <span
                         className={`inline-flex items-center px-3 py-1 rounded-full text-sm font-medium ${
-                          stock.change >= 0
-                            ? "bg-green-100 text-green-800"
-                            : "bg-red-100 text-red-800"
+                          stock.change >= 0 ? "bg-green-100 text-green-800" : "bg-red-100 text-red-800"
                         }`}
                       >
                         {stock.change >= 0 ? "+" : ""}
@@ -224,7 +187,7 @@ const didFetch = useRef(false);
             </table>
           </div>
 
-          {/* Mobile Cards */}
+          {/* Mobile view */}
           <div className="sm:hidden divide-y divide-gray-200">
             {stocks.map((stock) => (
               <div key={stock.symbol} className="p-4">
