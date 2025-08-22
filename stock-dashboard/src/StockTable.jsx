@@ -1,4 +1,5 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect,useRef } from "react";
+import Spinner from "./Spinner";
 
 export default function StockTable() {
   // State to hold stock data
@@ -14,10 +15,27 @@ export default function StockTable() {
   const symbols = ["AAPL", "MSFT", "GOOGL", "TSLA"];
 
   
+const didFetch = useRef(false);
+
   useEffect(() => {
+    if (didFetch.current) return; // skip if already fetched
+  didFetch.current = true;
+
     setSource(""); // reset source
-    fetchStocks();
-  }, []);
+     // Check cached data
+  const cached = localStorage.getItem("stocks");
+  const cacheTime = localStorage.getItem("stocks_time");
+  const now = Date.now();
+
+  // Only use cache if it's less than 5 minutes old
+  if (cached && cacheTime && now - cacheTime < 5 * 60 * 1000) {
+    setStocks(JSON.parse(cached));
+    setUsingSampleData(false);
+  } else {
+    fetchStocks(); // fetch fresh data once
+  }
+  // Empty dependency array ensures this runs only once on mount
+}, []);
 
   const fetchStocks = async () => {
     setLoading(true);
@@ -37,7 +55,7 @@ export default function StockTable() {
           if (!quote) return null;
 
           return {
-            symbol,
+            symbol:quote["01. symbol"],
             price: parseFloat(quote["05. price"]),
             change: (
               ((parseFloat(quote["05. price"]) -
@@ -68,7 +86,7 @@ export default function StockTable() {
             if (!data || !data.c) return null;
 
             return {
-              symbol,
+              symbol : symbol,
               price: data.c,
               change: (((data.c - data.pc) / data.pc) * 100).toFixed(2),
             };
@@ -95,9 +113,18 @@ export default function StockTable() {
       }
 
       setStocks(results);
+      localStorage.setItem("stocks", JSON.stringify(results));
+      localStorage.setItem("stocks_time", Date.now().toString());
+
+
     } catch (error) {
-      // If fetch fails, show sample data
-      console.error("Error fetching stock data:", error);
+       // If fetch fails, fallback to cache first
+    const cached = localStorage.getItem("stocks");
+    if (cached) {
+      setStocks(JSON.parse(cached));
+      setSource("Cache");
+    } else {
+      // No cache, use sample data
       setUsingSampleData(true);
       setStocks([
         { symbol: "AAPL", price: 172, change: 1.2 },
@@ -105,6 +132,7 @@ export default function StockTable() {
         { symbol: "GOOGL", price: 135, change: 0.5 },
         { symbol: "TSLA", price: 275, change: 2.1 },
       ]);
+    }
     } finally {
       setLoading(false);
     }
@@ -112,23 +140,17 @@ export default function StockTable() {
 
   // Show loading skeleton while fetching
   if (loading) {
-    return (
-      <div className="min-h-screen bg-gray-50 p-4 sm:p-6 lg:p-8">
-        <div className="max-w-4xl mx-auto">
-          <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-8 text-center">
-            <div className="animate-pulse">
-              <div className="h-8 bg-gray-200 rounded w-1/4 mx-auto mb-6"></div>
-              <div className="space-y-3">
-                {[1, 2, 3, 4].map((i) => (
-                  <div key={i} className="h-12 bg-gray-200 rounded"></div>
-                ))}
-              </div>
-            </div>
-          </div>
+  return (
+    <div className="min-h-screen bg-gray-50 p-4 sm:p-6 lg:p-8">
+      <div className="max-w-4xl mx-auto">
+        <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-8 text-center">
+          <Spinner />
         </div>
       </div>
-    );
-  }
+    </div>
+  );
+}
+
 
   return (
     <div className="min-h-screen bg-gray-50 p-4 sm:p-6 lg:p-8">
